@@ -238,6 +238,109 @@ std::string Lexeme::toString() const
     }
 }
 
+std::string Lexeme::toSource() const
+{
+    switch (type)
+    {
+    case Eof:
+        return "<eof>";
+
+    case Equal:
+        return "==";
+
+    case LessEqual:
+        return "<=";
+
+    case GreaterEqual:
+        return ">=";
+
+    case NotEqual:
+        return "~=";
+
+    case Dot2:
+        return "..";
+
+    case Dot3:
+        return "...";
+
+    case SkinnyArrow:
+        return "->";
+
+    case DoubleColon:
+        return "::";
+
+    case FloorDiv:
+        return "//";
+
+    case AddAssign:
+        return "+=";
+
+    case SubAssign:
+        return "-=";
+
+    case MulAssign:
+        return "*=";
+
+    case DivAssign:
+        return "/=";
+
+    case FloorDivAssign:
+        return "//=";
+
+    case ModAssign:
+        return "%=";
+
+    case PowAssign:
+        return "^=";
+
+    case ConcatAssign:
+        return "..=";
+
+    case RawString:
+    case QuotedString:
+    case InterpStringBegin:
+    case InterpStringMid:
+    case InterpStringEnd:
+    case InterpStringSimple:
+    case Number:
+    case Name:
+        return name;
+
+    case Comment:
+        return "comment";
+
+    case BrokenString:
+        return "malformed string";
+
+    case BrokenComment:
+        return "unfinished comment";
+
+    case BrokenInterpDoubleBrace:
+        return "{{";
+
+    case BrokenUnicode:
+        if (codepoint)
+        {
+            if (const char* confusable = findConfusable(codepoint))
+                return format("Unicode character U+%x (did you mean '%s'?)", codepoint, confusable);
+
+            return format("Unicode character U+%x", codepoint);
+        }
+        else
+        {
+            return "invalid UTF-8 sequence";
+        }
+
+    default:
+        if (type < Char_END)
+            return format("%c", type);
+        else if (type >= Reserved_BEGIN && type < Reserved_END)
+            return format("%s", kReserved[type - Reserved_BEGIN]);
+        else
+            return "<unknown>";
+    }
+}
+
 bool AstNameTable::Entry::operator==(const Entry& other) const
 {
     return length == other.length && memcmp(value.value, other.value.value, length) == 0;
@@ -407,6 +510,19 @@ const Lexeme& Lexer::next(bool skipComments, bool updatePrevLocation)
     } while (skipComments && (lexeme.type == Lexeme::Comment || lexeme.type == Lexeme::BlockComment));
 
     return lexeme;
+}
+
+const Lexeme& Lexer::readJSXInnerText()
+{
+    Position start = position();
+    size_t startOffset = offset;
+
+
+    // fall back to single-line comment
+    while (peekch() != 0 && peekch() != '<')
+        consumeAny();
+
+    return Lexeme(Location(start, position()), Lexeme::RawString, &buffer[startOffset], offset - startOffset);
 }
 
 void Lexer::nextline()

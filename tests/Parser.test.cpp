@@ -3,6 +3,7 @@
 
 #include "AstQueryDsl.h"
 #include "Fixture.h"
+#include "Luau/Ast.h"
 #include "ScopedFlags.h"
 
 #include "doctest.h"
@@ -3660,5 +3661,48 @@ TEST_CASE_FIXTURE(Fixture, "mixed_leading_intersection_and_union_not_allowed")
     matchParseError("type A = | number & string & boolean", "Mixing union and intersection types is not allowed; consider wrapping in parentheses.");
 }
 
+TEST_CASE_FIXTURE(Fixture, "jsx_mode")
+{
+    ParseOptions options;
+    options.captureComments = true;
 
+    ParseResult result = parseEx("--!jsx", options);
+    CHECK(result.errors.empty());
+    REQUIRE(result.hotcomments.size() == 1);
+}
+
+TEST_CASE_FIXTURE(Fixture, "parse_jsx")
+{
+    AstStat* stat = parse("--!jsx\n\nlocal React = {}\nreturn <MyElement></MyElement>");
+    REQUIRE(stat != nullptr);
+
+    AstStatReturn* ret = stat->as<AstStatBlock>()->body.data[1]->as<AstStatReturn>();
+    LUAU_ASSERT(ret);
+    AstExprCall* call = ret->list.data[0]->as<AstExprCall>();
+    LUAU_ASSERT(call);
+}
+
+TEST_CASE_FIXTURE(Fixture, "jsx_without_react")
+{
+    ParseResult result = tryParse(R"(--!jsx
+      return <Element></Element>
+    )");
+
+    REQUIRE_EQ(1, result.errors.size());
+
+    CHECK_EQ(Location{{1, 13}, {1, 14}}, result.errors[0].getLocation());
+    CHECK_EQ("Tried to use JSX, but no local React was declared", result.errors[0].getMessage());
+}
+
+TEST_CASE_FIXTURE(Fixture, "jsx_without_hot_comment")
+{
+    ParseResult result = tryParse(R"(
+      return <Element></Element>
+    )");
+
+    REQUIRE(result.errors.size() > 0);
+
+    CHECK_EQ(Location{{1, 13}, {1, 14}}, result.errors[0].getLocation());
+    CHECK_EQ("Expected identifier when parsing expression, got '<'", result.errors[0].getMessage());
+}
 TEST_SUITE_END();

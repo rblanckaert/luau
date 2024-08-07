@@ -241,6 +241,9 @@ private:
     // where `binop' is any binary operator with a priority higher than `limit'
     AstExpr* parseExpr(unsigned int limit = 0);
 
+    // jsx epxrssion, needs hot comment
+    AstExpr* parseJSXExpr();
+
     // NAME
     AstExpr* parseNameExpr(const char* context = nullptr);
 
@@ -410,6 +413,8 @@ private:
 
     std::vector<Comment> commentLocations;
     std::vector<HotComment> hotcomments;
+
+    bool hasHotComment(std::string comment);
 
     bool hotcommentHeader = true;
 
