@@ -2606,10 +2606,112 @@ AstExpr* Parser::parseSimpleExpr()
     {
         return parseIfElseExpr();
     }
+    else if (lexer.current().type == '<' && hasHotComment("jsx"))
+    {
+        return parseJSXExpr();
+    }
     else
     {
         return parsePrimaryExpr(/* asStatement= */ false);
     }
+}
+
+bool Parser::hasHotComment(std::string comment)
+{
+    for (const HotComment& c : hotcomments)
+    {
+        if (c.content == comment)
+            return true;
+    }
+    return false;
+}
+
+AstExpr* Parser::parseJSXExpr()
+{
+    printf("JsX TIme bb: %d:%d\n", lexer.current().location.end.line, lexer.current().location.end.column);
+    Location start = lexer.current().location;
+    nextLexeme();
+
+    std::vector<AstExpr*> argStroage;
+    TempVector<AstExpr*> args(argStroage);
+    AstExpr* tag = parseNameExpr("open-tag");
+
+    args.push_back(tag);
+    std::vector<AstExprTable::Item> attrsStroage;
+    TempVector<AstExprTable::Item> attrs(attrsStroage);
+    std::vector<AstExprTable::Item> childrenStorage;
+    TempVector<AstExprTable::Item> children(childrenStorage);
+
+    while (lexer.current().type != '>')
+    {
+        nextLexeme();
+    }
+    expectAndConsume('>', "end of opening tag");
+
+    do
+    {
+        if (lexer.current().type == '<')
+        {
+            if (lexer.lookahead().type == '/')
+                break;
+            AstExpr* child = parseJSXExpr();
+            children.push_back({AstExprTable::Item::List, nullptr, child});
+        }
+        else
+        {
+            if (!expectAndConsume('{', "JSX Implementation does't allow bare text, use {'text'}"))
+                break;
+
+            AstExpr* child = parseExpr();
+            children.push_back({AstExprTable::Item::List, nullptr, child});
+
+
+            expectAndConsume('}', "to end expression");
+            /*
+            scratchData.clear();
+            Location location = lexer.current().location;
+            Luau::Lexeme found = lexer.readJSXInnerText();
+            scratchData = std::string(found.data, found.length);
+            printf("Adding string [%s]\n", std::string(scratchData).c_str());
+            children.push_back({AstExprTable::Item::List, nullptr, allocator.alloc<AstExprConstantString>(location, copy(scratchData))});
+            */
+        }
+    } while (true);
+
+    args.push_back(allocator.alloc<AstExprTable>(Location(start, lexer.current().location), copy(children)));
+    args.push_back(allocator.alloc<AstExprTable>(Location(start, lexer.current().location), copy(children)));
+
+    expectAndConsume('<', "closing tag");
+    expectAndConsume('/', "closing tag");
+
+    auto close = parseNameExpr("close-tag");
+    // TODO: Check match somehow
+
+    expectAndConsume('>', "End of close tag");
+    Location end = lexer.current().location;
+
+    printf("JsX TIme bb: %d:%d\n", lexer.current().location.end.line, lexer.current().location.end.column);
+
+
+    AstLocal* local = nullptr;
+    for (auto i = localMap.begin(); i != localMap.end(); ++i)
+    {
+        if (i->first == "React")
+        {
+            local = i->second;
+            break;
+        }
+    }
+    if (!local)
+    {
+        return reportExprError(start, copy({tag}), "Tried to use JSX, but no local React was declared");
+    }
+
+    AstExprLocal* react = allocator.alloc<AstExprLocal>(start, local, local->functionDepth != functionStack.size() - 1);
+    AstExprIndexName* idx = allocator.alloc<AstExprIndexName>(start, react, AstName("createElement"), start, start.end, '.');
+
+    return allocator.alloc<AstExprCall>(start, idx, copy(args), false, Location(start, end));
+    return tag;
 }
 
 // args ::=  `(' [explist] `)' | tableconstructor | String

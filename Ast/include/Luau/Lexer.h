@@ -146,6 +146,7 @@ public:
     unsigned int getLength() const;
 
     std::string toString() const;
+    std::string toSource() const;
 };
 
 static_assert(sizeof(Lexeme) <= 32, "Size of `Lexeme` struct should be up to 32 bytes.");
@@ -198,6 +199,8 @@ public:
 
     const Lexeme& next();
     const Lexeme& next(bool skipComments, bool updatePrevLocation);
+    const Lexeme& readJSXInnerText();
+
     void nextline();
 
     Lexeme lookahead();
